@@ -212,7 +212,12 @@ export class Armor extends BaseArmor {
     this.jewelSlots = jewelSlots;
     this.canMod = canMod;
     if (enchant) this.enchant = enchant;
-    this.jewels = jewels;
+    // Initialize jewels array with correct size if not provided
+    if (jewels.length === 0) {
+      this.jewels = new Array(jewelSlots).fill(undefined);
+    } else {
+      this.jewels = jewels;
+    }
     if (modifier) this.modifier = modifier;
   }
 
@@ -224,6 +229,7 @@ export class Armor extends BaseArmor {
     }
 
     for (const jewel of this.jewels) {
+      if (jewel == undefined) continue;  // Add this check
       for (const i of jewel.nonZeroStats) stats[i] += jewel.stats[i];
     }
 
@@ -625,6 +631,7 @@ function getCount(armorList: Armor[], type: OtherType) {
         break;
       case "jewel":
         for (const jewel of armor.jewels) {
+          if (jewel == undefined) continue;  // Add this check
           count[jewel.name] = (count[jewel.name] || 0) + 1;
         }
         break;
@@ -995,12 +1002,15 @@ export function solve() {
     log(console.time, "solveModifier");
     for (let i = 0; i < 5; i++) {
       for (const armorBuild of builds) {
-        if (!armorBuild.armorList[i].canMod) modifierSet.add(armorBuild);
+        let addedBuild = false;
         for (const modifier of modifierArr) {
-          if (modifier.name == "Atlantean" && armorBuild.insanity() >= insanity)
-            continue;
+          // Skip if this armor piece can't have modifiers and it's not Atlantean
           if (!armorBuild.armorList[i].canMod && modifier.name != "Atlantean")
             continue;
+          
+          if (modifier.name == "Atlantean" && armorBuild.insanity() >= insanity)
+            continue;
+          
           const armorList = duplicateArmorList(armorBuild.armorList);
           armorList[i].modifier = modifier;
           if (getNeeded(armorList, "modifier") > 5 - i - 1 || !checkMaxBound(armorList, "modifier"))
@@ -1016,10 +1026,16 @@ export function solve() {
             ) {
               actualModifier++;
               modifierSet.add(build);
+              addedBuild = true;
             } else {
               dupesModifier++;
             }
           }
+        }
+        // Only add the build without modifier if no modifier was successfully added
+        // AND this piece can't have modifiers
+        if (!addedBuild && !armorBuild.armorList[i].canMod) {
+          modifierSet.add(armorBuild);
         }
       }
       builds = modifierSet.toList();
@@ -1084,17 +1100,23 @@ export function solve() {
   let tempActualJewel = actualJewel;
   let tempValidJewel = validJewel;
   log(console.time, "solveJewels");
-  for (let i = 0; i < 10; i++) {
+
+  // Calculate max jewel slots dynamically
+  const maxJewelSlots = builds.length > 0 
+    ? Math.max(...builds.map(b => b.jewelSlots)) 
+    : 10;
+
+  for (let i = 0; i < maxJewelSlots; i++) {
     prevJewelCount = 0;
     for (const enchantBuild of builds) {
-      if (enchantBuild.jewelSlots < 10 - i) {
+      if (enchantBuild.jewelSlots < maxJewelSlots - i) {
         jewelSet.add(enchantBuild);
         continue;
       }
       for (const j in jewelArr) {
         const jewel = jewelArr[j];
         if (
-          drawback - enchantBuild.drawback() < 10 - i &&
+          drawback - enchantBuild.drawback() < maxJewelSlots - i &&
           jewel.name == "Painite"
         )
           continue;
@@ -1103,7 +1125,7 @@ export function solve() {
 
         // figure out which armor to add jewel to
         let index = 0,
-          used = enchantBuild.jewelSlots - 10 + i;
+          used = enchantBuild.jewelSlots - maxJewelSlots + i;
         for (const armor of armorList) {
           if (used < armor.jewelSlots) {
             break;
@@ -1112,7 +1134,7 @@ export function solve() {
           used -= armor.jewelSlots;
         }
         armorList[index].jewels[used] = jewel;
-        if (getNeeded(armorList, "jewel") > 10 - i - 1 || !checkMaxBound(armorList, "jewel"))
+        if (getNeeded(armorList, "jewel") > maxJewelSlots - i - 1 || !checkMaxBound(armorList, "jewel"))
           continue;
         const build = new Build(armorList);
         nJewel++;

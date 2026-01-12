@@ -159,6 +159,13 @@ function ArmorCalculator() {
             else if (data.type == "solve") {
                 setBuilds(data.body);
                 setLoading(false);
+                setProgress(null);
+            }
+            else if (data.type == "progress") {
+                setProgress({
+                    stage: data.body.stage,
+                    percentage: data.body.percentage
+                });
             }
         };
     }, []);
@@ -266,6 +273,8 @@ function ArmorCalculator() {
     const [builds, setBuilds] = useState<Build[]>([]);
     const [loading, setLoading] = useState(false);
     const [loadingTextIndex, setLoadingTextIndex] = useState(0);
+    const [progress, setProgress] = useState<{stage: string, percentage: number} | null>(null);
+
     const update = () => {
         if (!loaded) return;
         setLoading(true);
@@ -382,7 +391,22 @@ function ArmorCalculator() {
         <Button onClick={clear}>Clear</Button>
         <BrSmall />
         <div className="flex flex-row flex-wrap justify-center gap-[10px] m-auto w-[90%]">
-            {loading && <div>{loadingText[loadingTextIndex]}</div>}
+            {loading && (
+                <div className="flex flex-col items-center gap-2">
+                    <div>{loadingText[loadingTextIndex]}</div>
+                    {progress && (
+                        <div className="w-64">
+                            <div className="text-sm mb-1">{progress.stage} - {progress.percentage}%</div>
+                            <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                                <div 
+                                    className="bg-blue-600 h-2.5 rounded-full transition-all duration-300" 
+                                    style={{width: `${progress.percentage}%`}}
+                                ></div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
             {builds.map((build, index) => {
                 return <BuildComponent key={index} build={build} decimals={decimals} />
             })}

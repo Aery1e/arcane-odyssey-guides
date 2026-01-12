@@ -22,10 +22,17 @@ export type ArmorCalculatorInput = {
   modifierBounds: { [key: string]: [number, number] };
 };
 
-export type EventType = "init" | "config" | "solve";
+export type EventType = "init" | "config" | "solve" | "progress";
 export interface EventData {
   type: EventType;
   body: any;
+}
+
+export interface ProgressData {
+  stage: string;
+  current: number;
+  total: number;
+  percentage: number;
 }
 
 // For armor filter

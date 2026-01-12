@@ -830,6 +830,17 @@ export function updateInfo(info: any) {
 
 // The main function. Returns an array of the top 100 builds
 export function solve() {
+  // Add sendProgress function that posts messages
+  const sendProgress = (stage: string, percentage: number) => {
+    self.postMessage({
+      type: "progress",
+      body: {
+        stage,
+        percentage: Math.min(100, Math.max(0, Math.round(percentage)))
+      }
+    });
+  };
+
   // New arrays after filtering, passed by reference
   const armorArr: Armor[][] = [[], [], [], [], []];
   const enchantArr: BaseArmor[] = [];
@@ -863,13 +874,21 @@ export function solve() {
 
   const armorSet = new TreeSet<Build>((a, b) => a.compare(b));
   log(console.time, "solveArmor");
-  // How many armor pieces with no good builds, used for canceling early when certain threshold reached
   let prevArmorCount = [0, 0, 0, 0, 0];
-  // Stores the actual armor count for each armor piece, if actualArmor stays the same, then we can add to count
   let tempActualArmor = [0, 0, 0, 0, 0];
   let tempValidArmor = [0, 0, 0, 0, 0];
+  
+  // Track progress for armor phase
+  let chestplateProgress = 0;
+  const totalChestplates = armorArr[OrderIndex.Chestplate].length;
 
   for (const armor of armorArr[OrderIndex.Chestplate]) {
+    // Update progress based on chestplate iteration
+    if (chestplateProgress % 5 === 0) {
+      sendProgress("Armor", (chestplateProgress / totalChestplates) * 100);
+    }
+    chestplateProgress++;
+    
     tempActualArmor[0] = actualArmor;
     tempValidArmor[0] = validArmor;
     prevArmorCount[1] = 0;
@@ -993,45 +1012,60 @@ export function solve() {
   const modifierSet = useModifier ? new TreeSet<Build>((a, b) => a.compare(b)) : armorSet;
   if (useModifier) {
     log(console.time, "solveModifier");
-    for (let i = 0; i < 5; i++) {
-      for (const armorBuild of builds) {
-        if (!armorBuild.armorList[i].canMod) modifierSet.add(armorBuild);
-        for (const modifier of modifierArr) {
-          if (modifier.name == "Atlantean" && armorBuild.insanity() >= insanity)
-            continue;
-          if (!armorBuild.armorList[i].canMod && modifier.name != "Atlantean")
-            continue;
-          const armorList = duplicateArmorList(armorBuild.armorList);
-          armorList[i].modifier = modifier;
-          if (getNeeded(armorList, "modifier") > 5 - i - 1 || !checkMaxBound(armorList, "modifier"))
-            continue;
-          const build = new Build(armorList);
-          nModifier++;
-          if (isValid(build)) {
-            validModifier++;
-            const worstBuild = modifierSet.first();
-            if (
-              modifierSet.size < ARMOR_SIZE ||
-              (worstBuild && build.compare(worstBuild) < 0)
-            ) {
-              actualModifier++;
-              modifierSet.add(build);
-            } else {
-              dupesModifier++;
-            }
+    sendProgress("Modifiers", 0);
+    
+    let modifierProgress = 0;
+    const totalBuilds = builds.length;
+    
+    for (const armorBuild of builds) {
+      if (modifierProgress % 100 === 0 && totalBuilds > 0) {
+        sendProgress("Modifiers", (modifierProgress / totalBuilds) * 100);
+      }
+      modifierProgress++;
+      
+      if (armorBuild.modifiersLeft() == 0) {
+        modifierSet.add(armorBuild);
+        continue;
+      }
+      for (const j in modifierArr) {
+        const modifier = modifierArr[j];
+        const armorList = duplicateArmorList(armorBuild.armorList);
+        let index = 0;
+        for (const armor of armorList) {
+          if (armor.canMod && !armor.modifier) break;
+          index++;
+        }
+        armorList[index].modifier = modifier;
+        if (getNeeded(armorList, "modifier") > armorBuild.modifiersLeft() - 1 || !checkMaxBound(armorList, "modifier"))
+          continue;
+        const build = new Build(armorList);
+        nModifier++;
+        if (isValid(build)) {
+          validModifier++;
+          const worstBuild = modifierSet.first();
+          if (
+            modifierSet.size < ARMOR_SIZE ||
+            (worstBuild && build.compare(worstBuild) < 0)
+          ) {
+            actualModifier++;
+            modifierSet.add(build);
+          } else {
+            dupesModifier++;
           }
         }
       }
-      builds = modifierSet.toList();
-      modifierSet.clear();
     }
+    builds = modifierSet.toList();
+    modifierSet.clear();
   }
 
   if (useModifier) log(console.timeEnd, "solveModifier");
   const enchantSet = new TreeSet<Build>((a, b) => a.compare(b));
   log(console.time, "solveEnchant");
+  
   // Get best builds with enchants
   for (let i = 0; i < 5; i++) {
+    sendProgress("Enchants", ((i + 1) / 5) * 100);
     for (const armorBuild of builds) {
       for (const enchant of enchantArr) {
         if (armorBuild.warding() == warding && enchant.name == "Virtuous")
@@ -1084,9 +1118,20 @@ export function solve() {
   let tempActualJewel = actualJewel;
   let tempValidJewel = validJewel;
   log(console.time, "solveJewels");
+  
   for (let i = 0; i < 10; i++) {
     prevJewelCount = 0;
+    let buildProgress = 0;
+    const totalJewelBuilds = builds.length;
+    
     for (const enchantBuild of builds) {
+      // Update progress within each jewel iteration
+      if (buildProgress % 50 === 0 && totalJewelBuilds > 0) {
+        const iterationProgress = (i / 10) + (buildProgress / totalJewelBuilds / 10);
+        sendProgress("Jewels", iterationProgress * 100);
+      }
+      buildProgress++;
+      
       if (enchantBuild.jewelSlots < 10 - i) {
         jewelSet.add(enchantBuild);
         continue;
